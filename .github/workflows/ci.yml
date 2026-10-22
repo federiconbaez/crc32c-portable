@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: ${{ matrix.os }} / ${{ matrix.cxx }} / ${{ matrix.config }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-24.04-arm]
+        cxx: [g++, clang++]
+        config: [sanitize, release]
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install toolchain
+        run: sudo apt-get update && sudo apt-get install -y ninja-build clang
+      - name: Configure
+        run: |
+          if [ "${{ matrix.config }}" = sanitize ]; then
+            cmake -S . -B build -G Ninja -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} -DCMAKE_BUILD_TYPE=Debug -DCRC32C_SANITIZE=ON
+          else
+            cmake -S . -B build -G Ninja -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} -DCMAKE_BUILD_TYPE=Release
+          fi
+      - name: Build
+        run: cmake --build build
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+      - name: Bench (release only, informational)
+        if: matrix.config == 'release'
+        run: ./build/bench_crc32c
+
+  fuzz:
+    name: fuzz (${{ matrix.os }}, 60 s)
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-24.04-arm]
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install toolchain
+        run: sudo apt-get update && sudo apt-get install -y ninja-build clang
+      - name: Build fuzzer
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCRC32C_FUZZ=ON -DCRC32C_BENCH=OFF
+          cmake --build build --target fuzz_crc32c
+      - name: Run
+        run: ./build/fuzz_crc32c -max_total_time=60 -max_len=8192
