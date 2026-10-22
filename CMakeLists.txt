@@ -20,3 +20,9 @@ if(CRC32C_SANITIZE)
   target_link_options(crc32c PUBLIC -fsanitize=address,undefined)
 endif()
 
+enable_testing()
+add_executable(test_crc32c tests/test_crc32c.cpp)
+target_link_libraries(test_crc32c PRIVATE crc32c)
+target_compile_options(test_crc32c PRIVATE -Wall -Wextra -Werror)
+add_test(NAME crc32c COMMAND test_crc32c)
+
